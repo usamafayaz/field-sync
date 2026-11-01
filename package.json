@@ -9,15 +9,21 @@
     "start": "react-native start",
     "test": "jest",
     "server": "node server/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "android:2g": "adb emu network speed gsm && adb emu network delay gprs",
+    "android:fast": "adb emu network speed full && adb emu network delay none"
   },
   "dependencies": {
+    "@bam.tech/react-native-image-resizer": "^3.0.11",
+    "@dr.pogodin/react-native-fs": "^2.41.0",
+    "@react-native-community/netinfo": "^12.0.1",
     "@react-navigation/bottom-tabs": "^7.21.0",
     "@react-navigation/native": "^7.5.1",
     "@react-navigation/native-stack": "^7.21.0",
     "lucide-react-native": "^1.65.0",
     "react": "19.3.0",
     "react-native": "0.88.1",
+    "react-native-image-picker": "^8.3.0",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.30.1",
     "react-native-svg": "^15.16.0"
@@ -46,5 +52,13 @@
   },
   "engines": {
     "node": ">= 22.11.0"
+  },
+  "codegenConfig": {
+    "name": "FieldSyncSpecs",
+    "type": "modules",
+    "jsSrcsDir": "src/specs",
+    "android": {
+      "javaPackageName": "com.fieldsync.specs"
+    }
   }
 }

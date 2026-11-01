@@ -45,6 +45,7 @@ const delivered = (env: ReturnType<typeof setup>) => env.outbox.all().filter(r =
 async function boot(env: ReturnType<typeof setup>) {
   await env.outbox.load();
   await env.drafts.load();
+  await env.outbox.removeOrphanFiles();
   env.engine.start();
 }
 
@@ -64,7 +65,7 @@ describe('the main scenario from the brief', () => {
     first.network.set(true);
     first.server.faults = { dropChunks: 2 };
     await until(() => first.server.log.length > 3, 'some upload started');
-    void first.engine.stop();
+    first.engine.stop(); // not awaited: the old process just stops
 
     const second = setup({ fs: first.fs, server: first.server });
     await boot(second);
@@ -219,5 +220,25 @@ describe('composing', () => {
     await again.drafts.load();
     expect(again.drafts.get().images).toHaveLength(0);
     expect(again.outbox.all()).toHaveLength(1);
+  });
+
+  it('a crash after moving the photos but before recording the report loses nothing', async () => {
+    const env = setup();
+    await boot(env);
+    env.network.set(false);
+    env.fs.put('/p/a.jpg', 100);
+    await env.drafts.setDescription('half saved');
+    await env.drafts.addImages([{ path: '/p/a.jpg', bytes: 100, width: 10, height: 10, mime: 'image/jpeg' }]);
+    const { id } = env.drafts.get();
+    await env.engine.stop();
+
+    // The first step of submit (the folder rename) happened; the outbox write did not.
+    await env.fs.move(`/docs/draft/${id}`, `/docs/reports/${id}`);
+    const again = setup({ fs: env.fs, server: env.server });
+    await boot(again);
+    expect(again.outbox.all()).toHaveLength(0);
+    expect(again.drafts.get().images).toHaveLength(1);
+    expect(await again.fs.exists(again.drafts.get().images[0].path)).toBe(true);
+    await again.engine.stop();
   });
 });

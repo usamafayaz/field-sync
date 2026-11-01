@@ -29,12 +29,11 @@ export class Outbox {
     } else {
       this.reports = [];
     }
-    await this.removeOrphanFiles();
     this.emit();
   }
 
   /** Deletes report folders nothing owns (a crashed save, or files left after delivery). */
-  private async removeOrphanFiles(): Promise<void> {
+  async removeOrphanFiles(): Promise<void> {
     const known = new Set(this.reports.filter(r => r.status !== 'delivered').map(r => r.id));
     for (const name of await this.fs.list(this.reportsDir)) {
       if (!known.has(name)) await this.fs.remove(`${this.reportsDir}/${name}`);

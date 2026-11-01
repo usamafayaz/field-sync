@@ -25,7 +25,7 @@ export function validateDraft(d: Pick<Draft, 'description' | 'images'>): DraftPr
 export function newId(random: () => number = Math.random): ReportId {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.floor(random() * 16);
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    return (c === 'x' ? r : 8 + (r % 4)).toString(16); // y is 8, 9, a or b
   });
 }
 
@@ -41,8 +41,12 @@ export class DraftStore {
     this.draft = this.empty();
   }
 
-  private get dir() {
+  private get root() {
     return `${this.fs.documentDir}/draft`;
+  }
+  /** Each draft's photos live in a folder named by its id, so saving is one rename. */
+  private photosDir(id: ReportId) {
+    return `${this.root}/${id}`;
   }
   private get file() {
     return `${this.fs.documentDir}/draft.json`;
@@ -53,13 +57,18 @@ export class DraftStore {
   }
 
   async load(): Promise<void> {
-    await this.fs.mkdir(this.dir);
+    await this.fs.mkdir(this.root);
     if (await this.fs.exists(this.file)) {
       const saved = JSON.parse(await this.fs.readText(this.file)) as Draft;
       // Already in the outbox means we crashed after saving but before clearing. It's sent; drop it.
       if (this.outbox.get(saved.id)) {
         await this.discard();
         return;
+      }
+      // Crashed between moving the photos and recording the report: move them back.
+      const moved = this.outbox.reportDir(saved.id);
+      if (!(await this.fs.exists(this.photosDir(saved.id))) && (await this.fs.exists(moved))) {
+        await this.fs.move(moved, this.photosDir(saved.id));
       }
       const images: SourceImage[] = [];
       for (const img of saved.images) if (await this.fs.exists(img.path)) images.push(img);
@@ -91,14 +100,17 @@ export class DraftStore {
     return this.persist();
   }
 
-  /** Copies picked photos into app storage. Returns how many were added (never past the limit). */
+  /** Takes picked photos into app storage. Returns how many were added (never past the limit). */
   async addImages(picked: SourceImage[]): Promise<number> {
     const room = MAX_IMAGES - this.draft.images.length;
     const accepted = picked.slice(0, Math.max(0, room));
+    const dir = this.photosDir(this.draft.id);
+    await this.fs.mkdir(dir);
     const copied: SourceImage[] = [];
     for (const img of accepted) {
-      const path = `${this.dir}/${newId(this.random)}.${extFor(img.mime)}`;
-      await this.fs.copy(img.path, path);
+      const path = `${dir}/${newId(this.random)}.${extFor(img.mime)}`;
+      // The picker's file is our own cache copy, so a rename is enough; copy only if that fails.
+      await this.fs.move(img.path, path).catch(() => this.fs.copy(img.path, path));
       copied.push({ ...img, path, bytes: await this.fs.size(path) });
     }
     this.draft = { ...this.draft, images: [...this.draft.images, ...copied] };
@@ -123,15 +135,11 @@ export class DraftStore {
     const existing = this.outbox.get(d.id);
     if (existing) return existing;
 
+    // One rename, however big the photos. load() undoes it if we crash before outbox.add.
+    const from = this.photosDir(d.id);
     const dir = this.outbox.reportDir(d.id);
-    await this.fs.mkdir(dir);
-    const images = [];
-    for (let i = 0; i < d.images.length; i++) {
-      const src = d.images[i];
-      const path = `${dir}/source-${i}.${extFor(src.mime)}`;
-      await this.fs.copy(src.path, path); // copy, not move: the draft stays intact until the outbox has it
-      images.push({ source: { ...src, path } });
-    }
+    await this.fs.move(from, dir);
+    const images = d.images.map(src => ({ source: { ...src, path: src.path.replace(from, dir) } }));
     const report: LocalReport = {
       id: d.id,
       description: d.description.trim(),
@@ -149,7 +157,7 @@ export class DraftStore {
   async discard(): Promise<void> {
     this.draft = this.empty();
     await this.persist();
-    await this.fs.remove(this.dir);
-    await this.fs.mkdir(this.dir);
+    await this.fs.remove(this.root);
+    await this.fs.mkdir(this.root);
   }
 }

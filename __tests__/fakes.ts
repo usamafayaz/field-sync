@@ -30,6 +30,21 @@ export class MemoryFs implements FileSystem {
     this.files.set(to, new Uint8Array(this.must(from)));
   }
   async move(from: string, to: string) {
+    if (this.dirs.has(from)) {
+      for (const k of [...this.files.keys()]) {
+        if (k.startsWith(`${from}/`)) {
+          this.files.set(to + k.slice(from.length), this.files.get(k)!);
+          this.files.delete(k);
+        }
+      }
+      for (const d of [...this.dirs]) {
+        if (d === from || d.startsWith(`${from}/`)) {
+          this.dirs.delete(d);
+          this.dirs.add(to + d.slice(from.length));
+        }
+      }
+      return;
+    }
     this.files.set(to, this.must(from));
     this.files.delete(from);
   }
@@ -54,7 +69,7 @@ export class MemoryFs implements FileSystem {
   }
   put(p: string, bytes: number, seed = 1) {
     const data = new Uint8Array(bytes);
-    for (let i = 0; i < bytes; i++) data[i] = (i * 31 + seed * 7) & 0xff;
+    for (let i = 0; i < bytes; i++) data[i] = (i * 31 + seed * 7) % 256;
     this.files.set(p, data);
   }
   private must(p: string) {
