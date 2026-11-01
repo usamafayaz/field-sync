@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FieldSync server controls</title>
+<style>
+  :root{--paper:#ECEEEA;--surface:#FAFBF9;--ink:#1B2420;--ink2:#4D5853;--ink3:#87918C;--line:#D5DAD5;--hivis:#F5C518;--red:#B0362C;--green:#23734A}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+  main{max-width:720px;margin:0 auto;padding:32px 20px 64px}
+  h1{font-size:26px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
+  p.sub{color:var(--ink2);margin:0 0 24px}
+  section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+  h2{font-size:16px;margin:0 0 12px;font-weight:600}
+  .presets{display:flex;flex-wrap:wrap;gap:8px}
+  button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer}
+  button:hover{border-color:var(--ink3)}
+  button.primary{background:var(--hivis);border-color:#d9ad0f;font-weight:600}
+  button.danger{color:var(--red)}
+  .row{display:grid;grid-template-columns:1fr 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid #e6e9e5}
+  .row:first-of-type{border-top:0}
+  .row label b{display:block;font-weight:500}
+  .row label span{color:var(--ink3);font-size:13px}
+  input{font:inherit;width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right}
+  .state{display:flex;gap:24px;color:var(--ink2)}
+  .state b{color:var(--ink);font-size:20px;display:block;font-variant-numeric:tabular-nums}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+<main>
+  <h1>Server controls</h1>
+  <p class="sub">Make the backend misbehave on purpose. Changes apply to the next request.</p>
+
+  <section>
+    <h2>Right now</h2>
+    <div class="state">
+      <div><b id="committed">–</b>reports stored</div>
+      <div><b id="partial">–</b>reports half-uploaded</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Presets</h2>
+    <div class="presets">
+      <button data-preset="healthy" class="primary">Healthy</button>
+      <button data-preset="2g">Slow 2G</button>
+      <button data-preset="flaky">Flaky: drops, 503s, lost replies</button>
+      <button data-preset="down">Down: every request 503</button>
+      <button data-preset="black-hole">Black hole: never answers</button>
+      <button data-preset="refuse">Refuse uploads (400)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Fine-tune</h2>
+    <form id="f">
+      <div class="row"><label><b>Latency (ms)</b><span>Added before every request</span></label><input name="latencyMs" type="number" min="0" step="100"></div>
+      <div class="row"><label><b>Bandwidth (bytes/s)</b><span>0 is unthrottled. About 6000 is honest 2G</span></label><input name="bandwidthBps" type="number" min="0" step="1000"></div>
+      <div class="row"><label><b>Drop connection</b><span>Chance of killing the socket mid-upload, 0–1</span></label><input name="dropRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="row"><label><b>Server error (503)</b><span>Transient. The app should retry</span></label><input name="errorRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="row"><label><b>Hang</b><span>Accept the request, never answer</span></label><input name="hangRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="row"><label><b>Refuse upload (400)</b><span>Permanent. The app must stop and ask the user</span></label><input name="rejectRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="row"><label><b>Lose commit response</b><span>Store the report, then drop the reply</span></label><input name="loseResponseRate" type="number" min="0" max="1" step="0.05"></div>
+      <p><button class="primary" type="submit">Apply</button></p>
+    </form>
+  </section>
+
+  <section>
+    <h2>Danger</h2>
+    <button class="danger" id="wipe">Delete every report on the server</button>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+  const f = document.getElementById('f');
+  const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1600); };
+  const fill = faults => { for (const [k, v] of Object.entries(faults)) if (f.elements[k]) f.elements[k].value = v; };
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json());
+  async function refresh() {
+    const s = await fetch('/admin/state').then(r => r.json());
+    document.getElementById('committed').textContent = s.committedReports;
+    document.getElementById('partial').textContent = s.partialUploads;
+    if (!f.contains(document.activeElement)) fill(s.faults);
+  }
+  document.querySelectorAll('[data-preset]').forEach(b => b.onclick = async () => { const r = await post('/admin/faults', { preset: b.dataset.preset }); fill(r.faults); toast('Preset applied: ' + b.textContent); });
+  f.onsubmit = async e => { e.preventDefault(); const body = {}; for (const el of f.elements) if (el.name) body[el.name] = Number(el.value) || 0; fill((await post('/admin/faults', body)).faults); toast('Applied'); };
+  const wipe = document.getElementById('wipe');
+  let armed = null;
+  wipe.onclick = async () => {
+    if (!armed) {
+      wipe.textContent = 'Click again to delete everything';
+      armed = setTimeout(() => { armed = null; wipe.textContent = 'Delete every report on the server'; }, 4000);
+      return;
+    }
+    clearTimeout(armed); armed = null;
+    wipe.textContent = 'Delete every report on the server';
+    await post('/admin/wipe'); toast('Server data deleted'); refresh();
+  };
+  refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>
