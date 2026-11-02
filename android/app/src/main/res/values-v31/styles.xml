@@ -1,0 +1,8 @@
+<resources>
+    <!-- Android 12+ draws its own splash from these. -->
+    <style name="Theme.App.Starting" parent="AppTheme">
+        <item name="android:windowSplashScreenBackground">@color/brand_ink</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>

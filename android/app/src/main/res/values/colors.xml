@@ -1,0 +1,6 @@
+<resources>
+    <color name="brand_ink">#1B2420</color>
+    <color name="brand_ground">#ECEEEA</color>
+    <!-- Native accents (dialog buttons, text cursors): same roles as the JS theme. -->
+    <color name="accent">#137A3B</color>
+</resources>

@@ -1,12 +1,15 @@
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, type BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { PlatformPressable } from '@react-navigation/elements';
 import { DarkTheme, DefaultTheme, NavigationContainer, type Theme as NavTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Database, Inbox, SlidersHorizontal } from 'lucide-react-native';
 import React, { useMemo } from 'react';
+import type { ServerReport } from '../delivery/types';
 import { useOutbox } from './hooks';
 import { ComposeScreen } from './screens/ComposeScreen';
 import { OutboxScreen } from './screens/OutboxScreen';
 import { ReportScreen } from './screens/ReportScreen';
+import { ServerReportScreen } from './screens/ServerReportScreen';
 import { ServerScreen } from './screens/ServerScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { font, useTheme } from './theme';
@@ -15,6 +18,7 @@ export type RootStack = {
   Tabs: undefined;
   Compose: undefined;
   Report: { id: string };
+  ServerReport: { report: ServerReport };
 };
 
 const Stack = createNativeStackNavigator<RootStack>();
@@ -24,6 +28,12 @@ type TabIconProps = { color: string; size: number };
 const ReportsIcon = ({ color, size }: TabIconProps) => <Inbox color={color} size={size} />;
 const ServerIcon = ({ color, size }: TabIconProps) => <Database color={color} size={size} />;
 const SettingsIcon = ({ color, size }: TabIconProps) => <SlidersHorizontal color={color} size={size} />;
+
+/** Same round ripple as the default, but smaller and in the soft theme colour instead of a heavy grey. */
+function TabButton(props: BottomTabBarButtonProps) {
+  const { color } = useTheme();
+  return <PlatformPressable {...props} android_ripple={{ color: color.ripple, borderless: true, radius: 40 }} />;
+}
 
 function Tabs() {
   const { color, state } = useTheme();
@@ -38,6 +48,7 @@ function Tabs() {
         tabBarInactiveTintColor: color.textFaint,
         tabBarStyle: { backgroundColor: color.surface, borderTopColor: color.border },
         tabBarLabelStyle: { fontFamily: font.medium, fontSize: 12 },
+        tabBarButton: TabButton,
       }}>
       <Tab.Screen
         name="Outbox"
@@ -83,6 +94,7 @@ export function Navigation() {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="Compose" component={ComposeScreen} options={{ headerShown: false, presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="Report" component={ReportScreen} options={{ title: 'Report' }} />
+        <Stack.Screen name="ServerReport" component={ServerReportScreen} options={{ title: 'On the server' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

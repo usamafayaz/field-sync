@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Appearance, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Appearance, Image, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { boot } from './src/services';
 import { useSettings } from './src/ui/hooks';
@@ -39,11 +39,12 @@ function Main() {
   );
 }
 
-/** Shown for the half second it takes to load the outbox from disk. */
+/** Same ink and logo as the native splash, so launch reads as one continuous screen. */
 function Launch({ error }: { error: string | null }) {
   return (
     <View style={styles.launch}>
       <StatusBar barStyle="light-content" />
+      <Image source={require('./src/ui/assets/logo.png')} style={styles.logo} />
       <View style={styles.below}>
         <Text style={styles.name}>FieldSync</Text>
         {error && (
@@ -59,7 +60,9 @@ function Launch({ error }: { error: string | null }) {
 
 const styles = StyleSheet.create({
   launch: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xl, backgroundColor: brand.ink },
-  below: { alignItems: 'center' },
+  // 113dp: the mark then matches the native splash logo exactly (288dp canvas × 0.36).
+  logo: { width: 113, height: 113 },
+  below: { position: 'absolute', top: '50%', left: 0, right: 0, marginTop: 80, alignItems: 'center', paddingHorizontal: space.xl },
   name: { fontFamily: font.semibold, fontSize: 22, letterSpacing: -0.2, color: brand.paper },
   error: { marginTop: space.xl, alignItems: 'center', gap: space.xs },
   errorTitle: { fontFamily: font.semibold, fontSize: 16, color: brand.greenBright, textAlign: 'center' },

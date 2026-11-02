@@ -2,8 +2,16 @@
 
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="colorAccent">@color/accent</item>
+    </style>
+
+    <!-- Shown while the app process starts; MainActivity switches to AppTheme. -->
+    <style name="Theme.App.Starting" parent="AppTheme">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">@color/brand_ink</item>
+        <item name="android:navigationBarColor">@color/brand_ink</item>
     </style>
 
 </resources>

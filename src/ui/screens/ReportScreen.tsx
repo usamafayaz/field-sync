@@ -1,10 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RotateCcw, Trash2 } from 'lucide-react-native';
 import React from 'react';
-import { Alert, Image, ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, engine, outbox } from '../../services';
 import { Button, Card, Notice, ProgressBar, StatePill, useButtonIconColor } from '../components';
+import { confirm } from '../confirm';
 import { describeReport, formatBytes, timeAgo } from '../describe';
 import { useEngine, useNow, useOutbox } from '../hooks';
 import type { RootStack } from '../navigation';
@@ -34,19 +35,18 @@ export function ReportScreen({ route, navigation }: Props) {
   const view = describeReport(report, snap, now);
   const delivered = report.status === 'delivered';
 
-  function confirmDelete(id: string) {
-    Alert.alert('Delete this report from the phone?', 'It hasn’t reached the server. Deleting it here means it is gone for good.', [
-      { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          navigation.goBack();
-          await outbox.remove(id);
-          api.discardPartial(id);
-        },
-      },
-    ]);
+  async function confirmDelete(id: string) {
+    const ok = await confirm({
+      title: 'Delete this report from the phone?',
+      message: 'It hasn’t reached the server. Deleting it here means it is gone for good.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep it',
+      destructive: true,
+    });
+    if (!ok) return;
+    navigation.goBack();
+    await outbox.remove(id);
+    api.discardPartial(id);
   }
 
   return (

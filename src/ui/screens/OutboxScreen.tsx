@@ -8,6 +8,7 @@ import type { EngineSnapshot } from '../../delivery/engine';
 import type { LocalReport } from '../../delivery/types';
 import { api, engine, outbox } from '../../services';
 import { Button, ProgressBar, Section, StatePill } from '../components';
+import { confirm } from '../confirm';
 import { describeOutbox, describeReport, formatBytes } from '../describe';
 import { useDraft, useEngine, useNow, useOutbox } from '../hooks';
 import type { RootStack } from '../navigation';
@@ -38,6 +39,16 @@ export function OutboxScreen() {
   const draftInProgress = draft.images.length > 0 || draft.description.trim().length > 0;
   const HeadIcon = { needs: AlertTriangle, phone: snap.online ? Smartphone : WifiOff, moving: CloudUpload, server: CheckCircle2 }[headline.tone];
   const open = (id: string) => nav.navigate('Report', { id });
+
+  async function clearDelivered(delivered: LocalReport[]) {
+    const count = delivered.length === 1 ? 'this report' : `these ${delivered.length} reports`;
+    const ok = await confirm({
+      title: 'Clear confirmed reports?',
+      message: `The server already has ${count}. Clearing only removes them from this list and frees space on the phone.`,
+      confirmLabel: 'Clear',
+    });
+    if (ok) await Promise.all(delivered.map(r => outbox.remove(r.id)));
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -75,7 +86,7 @@ export function OutboxScreen() {
           <Section
             title="Recently confirmed"
             aside={
-              <Pressable hitSlop={12} onPress={() => groups.delivered.forEach(r => outbox.remove(r.id))}>
+              <Pressable hitSlop={12} onPress={() => clearDelivered(groups.delivered)} accessibilityRole="button" accessibilityLabel="Clear confirmed reports">
                 <Text style={styles.link}>Clear</Text>
               </Pressable>
             }>

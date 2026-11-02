@@ -1,5 +1,6 @@
 package com.fieldsync
 
+import android.os.Bundle
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -12,6 +13,13 @@ class MainActivity : ReactActivity() {
    * rendering of the component.
    */
   override fun getMainComponentName(): String = "FieldSync"
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    // Leave the launch theme (dark splash) for the normal app theme.
+    setTheme(R.style.AppTheme)
+    // null: react-native-screens restores its own state; passing it in can crash on restore.
+    super.onCreate(null)
+  }
 
   /**
    * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
