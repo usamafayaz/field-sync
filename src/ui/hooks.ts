@@ -82,5 +82,5 @@ export function useServerReports() {
     load();
   }, [serverUrl, load]);
 
-  return { state, reload: load, clear: () => setState({ kind: 'loading' }) };
+  return { state, reload: load };
 }

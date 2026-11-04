@@ -22,6 +22,8 @@ export interface HttpRequest {
   headers?: Record<string, string>;
   body?: string | ArrayBuffer;
   timeoutMs: number;
+  /** Give up sooner if no bytes have moved for this long: a stalled upload shouldn't wait out timeoutMs. */
+  idleTimeoutMs?: number;
   onUploadProgress?: (sentBytes: number) => void;
   signal?: AbortSignal;
 }

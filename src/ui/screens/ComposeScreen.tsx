@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { Camera, ImagePlus, Settings as SettingsIcon, X } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Linking, PermissionsAndroid, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, PermissionsAndroid, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { launchCamera, launchImageLibrary, type Asset, type ImagePickerResponse } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MAX_DESCRIPTION_LENGTH, MAX_IMAGES } from '../../config';
@@ -30,6 +30,7 @@ export function ComposeScreen() {
   const side = Math.floor((width - space.lg * 2 - space.sm * 2) / 3);
   const tile = { width: side, height: side };
   const [adding, setAdding] = useState(false);
+  const [incoming, setIncoming] = useState<SourceImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [triedToSave, setTriedToSave] = useState(false);
@@ -53,23 +54,30 @@ export function ComposeScreen() {
   );
 
   const room = MAX_IMAGES - draft.images.length;
-  const problems = validateDraft({ description: text, images: draft.images });
+  // Big photos take a moment to copy in; count them as soon as they're picked so errors clear instantly.
+  const problems = validateDraft({ description: text, images: [...draft.images, ...incoming] });
   const ready = problems.length === 0;
 
-  async function add(result: ImagePickerResponse) {
-    if (result.didCancel) return;
-    if (result.errorCode) {
-      setMessage(result.errorCode === 'camera_unavailable' ? 'This device has no camera available.' : `Couldn’t get the photo: ${result.errorMessage ?? result.errorCode}`);
-      return;
-    }
-    const picked = (result.assets ?? []).map(toSource).filter((x): x is SourceImage => x !== null);
+  // The picker copies each photo into our cache before it returns, which takes a few seconds for
+  // camera-size files. Mark busy before opening it, so the tiles show a spinner the moment it closes.
+  async function add(pick: () => Promise<ImagePickerResponse>) {
+    setMessage(null);
     setAdding(true);
     try {
+      const result = await pick();
+      if (result.didCancel) return;
+      if (result.errorCode) {
+        setMessage(result.errorCode === 'camera_unavailable' ? 'This device has no camera available.' : `Couldn’t get the photo: ${result.errorMessage ?? result.errorCode}`);
+        return;
+      }
+      const picked = (result.assets ?? []).map(toSource).filter((x): x is SourceImage => x !== null);
+      setIncoming(picked.slice(0, room));
       const added = await drafts.addImages(picked);
       setMessage(added < picked.length ? `Only ${MAX_IMAGES} photos fit in one report. ${picked.length - added} weren’t added.` : null);
     } catch (e) {
       setMessage(`Couldn’t save that photo on the phone: ${(e as Error).message}`);
     } finally {
+      setIncoming([]);
       setAdding(false);
     }
   }
@@ -78,13 +86,12 @@ export function ComposeScreen() {
     setMessage(null);
     if (camera.access !== 'granted' && !(await camera.request())) return;
     // quality 1 and no size limits: we want the original. Shrinking happens later, natively.
-    add(await launchCamera({ mediaType: 'photo', quality: 1, saveToPhotos: false, includeExtra: false }));
+    add(() => launchCamera({ mediaType: 'photo', quality: 1, saveToPhotos: false, includeExtra: false }));
   }
 
-  async function pickPhotos() {
-    setMessage(null);
+  function pickPhotos() {
     // Android's system photo picker: no storage permission needed, nothing for the user to grant.
-    add(await launchImageLibrary({ mediaType: 'photo', quality: 1, selectionLimit: room, includeExtra: false }));
+    add(() => launchImageLibrary({ mediaType: 'photo', quality: 1, selectionLimit: room, includeExtra: false }));
   }
 
   async function save() {
@@ -154,7 +161,9 @@ export function ComposeScreen() {
 
         <View style={styles.grid}>
           {draft.images.map((img, i) => (
-            <View key={img.path} style={[styles.tile, tile]}>
+            <View key={img.path} style={[styles.tile, styles.tileLoading, tile]}>
+              {/* Sits behind the photo; a big original takes a moment to decode, then covers it. */}
+              <ActivityIndicator color={color.textFaint} />
               <Image source={{ uri: `file://${img.path}` }} style={StyleSheet.absoluteFill} resizeMethod="resize" resizeMode="cover" />
               <Pressable
                 onPress={() => drafts.removeImage(i)}
@@ -167,12 +176,17 @@ export function ComposeScreen() {
               <Text style={styles.tileSize}>{formatBytes(img.bytes)}</Text>
             </View>
           ))}
-          {Array.from({ length: room }).map((_, i) => (
+          {incoming.map((_, i) => (
+            <View key={`incoming-${i}`} style={[styles.tile, tile, styles.tileLoading]} accessibilityLabel="Adding photo">
+              <ActivityIndicator color={color.textFaint} />
+            </View>
+          ))}
+          {Array.from({ length: room - incoming.length }).map((_, i) => (
             <Pressable
               key={`empty-${i}`}
               onPress={pickPhotos}
               disabled={adding}
-              style={({ pressed }) => [styles.tile, tile, styles.tileEmpty, pressed && styles.tilePressed, triedToSave && draft.images.length === 0 && i === 0 && styles.tileError]}
+              style={({ pressed }) => [styles.tile, tile, styles.tileEmpty, pressed && styles.tilePressed, triedToSave && problems.includes('no-images') && i === 0 && styles.tileError]}
               accessibilityRole="button"
               accessibilityLabel="Add photos from gallery">
               <ImagePlus size={22} color={color.textFaint} strokeWidth={1.75} />
@@ -190,6 +204,8 @@ export function ComposeScreen() {
           />
           <Button label="Gallery" icon={<ImagePlus size={20} color={iconColor} />} onPress={pickPhotos} disabled={room === 0 || adding} busy={adding} style={styles.addButton} />
         </View>
+        {/* The picker only says how many were picked once it has copied them all, so no count yet. */}
+        {adding && incoming.length === 0 && <Text style={[type.caption, styles.full]}>Adding photos…</Text>}
         {room === 0 && <Text style={[type.caption, styles.full]}>That’s the maximum of {MAX_IMAGES}. Remove one to add another.</Text>}
         {camera.access === 'blocked' ? (
           <View style={styles.permission}>
@@ -236,6 +252,7 @@ const useStyles = makeStyles(({ color, state }) => ({
   tile: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: color.sunken },
   tileEmpty: { backgroundColor: 'transparent', borderWidth: 1.5, borderStyle: 'dashed', borderColor: color.borderStrong, alignItems: 'center', justifyContent: 'center' },
   tilePressed: { backgroundColor: color.sunken },
+  tileLoading: { alignItems: 'center', justifyContent: 'center' },
   tileError: { borderColor: state.needs.dot },
   tileSize: { position: 'absolute', left: 6, bottom: 6, fontFamily: font.monoMedium, fontSize: 10.5, color: color.onOverlay, backgroundColor: color.overlay, paddingHorizontal: 5, borderRadius: 4, overflow: 'hidden' },
   remove: { position: 'absolute', top: 6, right: 6, width: 28, height: 28, borderRadius: 14, backgroundColor: color.overlay, alignItems: 'center', justifyContent: 'center' },

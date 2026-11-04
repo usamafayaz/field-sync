@@ -4,6 +4,7 @@ import { AlertTriangle, Camera, CheckCircle2, ChevronRight, CloudUpload, Smartph
 import React, { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MAX_IMAGES } from '../../config';
 import type { EngineSnapshot } from '../../delivery/engine';
 import type { LocalReport } from '../../delivery/types';
 import { api, engine, outbox } from '../../services';
@@ -104,7 +105,7 @@ export function OutboxScreen() {
       <View style={styles.dock}>
         <Button
           kind="primary"
-          label={draftInProgress ? `Continue draft (${draft.images.length} of 5 photos)` : 'New report'}
+          label={draftInProgress ? `Continue draft (${draft.images.length} of ${MAX_IMAGES} photos)` : 'New report'}
           icon={<Camera size={20} color={color.onAccent} strokeWidth={2.2} />}
           onPress={() => nav.navigate('Compose')}
           style={styles.dockButton}

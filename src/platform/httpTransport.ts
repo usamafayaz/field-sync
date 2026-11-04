@@ -13,23 +13,36 @@ export const xhrTransport: HttpTransport = {
         settled = true;
         req.signal?.removeEventListener('abort', onAbort);
         clearTimeout(timer);
+        clearTimeout(idleTimer);
         fn();
       };
       const onAbort = () => {
         settle(() => reject(new AbortedError('aborted')));
         xhr.abort();
       };
-      // Our own timer, so a server that goes silent after receiving the bytes still times out.
-      const timer = setTimeout(() => {
+      const timeOut = (ms: number) => {
         // Settle before abort(): abort() fires onabort synchronously, which would win the race.
-        settle(() => reject(new TimeoutError(`no response in ${req.timeoutMs} ms`)));
+        settle(() => reject(new TimeoutError(`no response in ${ms} ms`)));
         xhr.abort();
-      }, req.timeoutMs);
+      };
+      // Our own timers, so a server that goes silent after receiving the bytes still times out.
+      const timer = setTimeout(() => timeOut(req.timeoutMs), req.timeoutMs);
+      // The idle timer restarts whenever bytes move, so a slow upload is fine and a stalled one isn't.
+      let idleTimer: ReturnType<typeof setTimeout> | undefined;
+      const restartIdle = () => {
+        if (!req.idleTimeoutMs) return;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => timeOut(req.idleTimeoutMs!), req.idleTimeoutMs);
+      };
+      restartIdle();
 
       xhr.open(req.method, req.url);
       for (const [k, v] of Object.entries(req.headers ?? {})) xhr.setRequestHeader(k, v);
-      if (req.onUploadProgress && xhr.upload) {
-        xhr.upload.onprogress = e => req.onUploadProgress?.(e.loaded);
+      if ((req.onUploadProgress || req.idleTimeoutMs) && xhr.upload) {
+        xhr.upload.onprogress = e => {
+          restartIdle();
+          req.onUploadProgress?.(e.loaded);
+        };
       }
       xhr.onload = () =>
         settle(() =>

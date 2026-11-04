@@ -72,6 +72,7 @@ export class ServerApi {
         },
         body: chunk,
         timeoutMs,
+        idleTimeoutMs: REQUEST_TIMEOUT_MS,
         onUploadProgress: onProgress,
         signal,
       }),

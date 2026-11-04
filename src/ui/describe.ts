@@ -64,11 +64,11 @@ export function describeOutbox(reports: readonly LocalReport[], s: EngineSnapsho
     };
   }
   if (waiting.length === 0) {
-    const any = reports.length > 0;
+    const hasReports = reports.length > 0;
     return {
       tone: 'server',
-      title: any ? 'Everything is on the server' : 'Nothing waiting',
-      body: any ? 'Every report from this phone has been confirmed by the server.' : 'Reports you save will appear here until the server confirms them.',
+      title: hasReports ? 'Everything is on the server' : 'Nothing waiting',
+      body: hasReports ? 'Every report from this phone has been confirmed by the server.' : 'Reports you save will appear here until the server confirms them.',
     };
   }
 

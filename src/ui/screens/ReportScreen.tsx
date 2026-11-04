@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RotateCcw, Trash2 } from 'lucide-react-native';
-import React from 'react';
-import { Image, ScrollView, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, engine, outbox } from '../../services';
 import { Button, Card, Notice, ProgressBar, StatePill, useButtonIconColor } from '../components';
@@ -9,6 +9,7 @@ import { confirm } from '../confirm';
 import { describeReport, formatBytes, timeAgo } from '../describe';
 import { useEngine, useNow, useOutbox } from '../hooks';
 import type { RootStack } from '../navigation';
+import { PhotoViewer } from '../PhotoViewer';
 import { makeStyles, radius, space, useTheme } from '../theme';
 
 type Props = NativeStackScreenProps<RootStack, 'Report'>;
@@ -16,13 +17,14 @@ type Props = NativeStackScreenProps<RootStack, 'Report'>;
 export function ReportScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const styles = useStyles();
-  const { state, type } = useTheme();
+  const { color, state, type } = useTheme();
   const primaryIcon = useButtonIconColor('primary');
   const dangerIcon = useButtonIconColor('danger');
   const reports = useOutbox();
   const snap = useEngine();
   const now = useNow();
   const report = reports.find(r => r.id === route.params.id);
+  const [viewing, setViewing] = useState<number | null>(null);
 
   if (!report) {
     return (
@@ -34,6 +36,8 @@ export function ReportScreen({ route, navigation }: Props) {
 
   const view = describeReport(report, snap, now);
   const delivered = report.status === 'delivered';
+  // Once delivered, the phone's copies are gone, so show the server's.
+  const uris = report.images.map((img, i) => (delivered ? api.imageUrl(report.id, i) : `file://${(img.prepared ?? img.source).path}`));
 
   async function confirmDelete(id: string) {
     const ok = await confirm({
@@ -76,9 +80,15 @@ export function ReportScreen({ route, navigation }: Props) {
       <Text style={[type.caption, styles.heading]}>Photos</Text>
       <Card>
         {report.images.map((img, i) => {
-          const uri = delivered ? api.imageUrl(report.id, i) : `file://${(img.prepared ?? img.source).path}`;
+          const uri = uris[i];
           return (
-            <View key={i} style={[styles.photo, i > 0 && styles.photoDivider]}>
+            <Pressable
+              key={i}
+              onPress={() => setViewing(i)}
+              android_ripple={{ color: color.ripple }}
+              style={[styles.photo, i > 0 && styles.photoDivider]}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Open photo ${i + 1}`}>
               <Image source={{ uri }} style={styles.photoThumb} resizeMethod="resize" />
               <View style={styles.photoBody}>
                 <Text style={type.smallStrong}>Photo {i + 1}</Text>
@@ -93,10 +103,11 @@ export function ReportScreen({ route, navigation }: Props) {
                   </Text>
                 )}
               </View>
-            </View>
+            </Pressable>
           );
         })}
       </Card>
+      <PhotoViewer uris={uris} start={viewing} onClose={() => setViewing(null)} />
 
       <Text style={[type.caption, styles.heading]}>History</Text>
       <Card style={styles.history}>

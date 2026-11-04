@@ -31,7 +31,10 @@ const faults = {
 const PRESETS = {
   healthy: {},
   '2g': { latencyMs: 800, bandwidthBps: 6000 },
-  flaky: { latencyMs: 400, bandwidthBps: 20000, dropRate: 0.25, errorRate: 0.1, loseResponseRate: 0.3 },
+  // Unreliable but not slow (slow is 2G's job), so a full report still lands in a minute or two.
+  flaky: { latencyMs: 200, bandwidthBps: 300000, dropRate: 0.2, errorRate: 0.1, loseResponseRate: 0.3 },
+  // For recording: throttled, a few drops, and every report loses its reply once.
+  demo: { bandwidthBps: 800000, dropRate: 0.15, loseResponseRate: 1 },
   down: { errorRate: 1 },
   'black-hole': { hangRate: 1 },
   refuse: { rejectRate: 1 },
@@ -277,8 +280,30 @@ function adminPage(res) {
   res.end(fs.readFileSync(path.join(__dirname, 'admin.html')));
 }
 
+// The admin page uses the app's own fonts, so it looks the same with no internet.
+const FONTS = path.join(__dirname, '..', 'android', 'app', 'src', 'main', 'assets', 'fonts');
+function serveFont(res, name) {
+  if (!/^IBMPlex[A-Za-z]+_\d{3}[A-Za-z]+\.ttf$/.test(name)) return send(res, 404, { error: 'not found' });
+  fs.readFile(path.join(FONTS, name), (err, data) => {
+    if (err) return send(res, 404, { error: 'not found' });
+    res.writeHead(200, { 'Content-Type': 'font/ttf', 'Cache-Control': 'max-age=86400' });
+    res.end(data);
+  });
+}
+
+/** The preset the current faults match exactly, or null when they've been customised. */
+function currentMode() {
+  const zero = Object.fromEntries(Object.keys(faults).map(k => [k, 0]));
+  for (const [name, preset] of Object.entries(PRESETS)) {
+    const expected = { ...zero, ...preset };
+    if (Object.keys(faults).every(k => faults[k] === expected[k])) return name;
+  }
+  return null;
+}
+
 async function handleAdmin(req, res, url) {
   if (url.pathname === '/admin' && req.method === 'GET') return adminPage(res);
+  if (url.pathname.startsWith('/admin/fonts/') && req.method === 'GET') return serveFont(res, url.pathname.slice(13));
   if (url.pathname === '/admin/faults' && req.method === 'GET') return send(res, 200, { faults, presets: Object.keys(PRESETS) });
   if (url.pathname === '/admin/faults' && req.method === 'POST') {
     const body = await readJson(req);
@@ -299,9 +324,9 @@ async function handleAdmin(req, res, url) {
     return send(res, 200, { ok: true });
   }
   if (url.pathname === '/admin/state' && req.method === 'GET') {
-    const partial = fs.existsSync(UPLOADS) ? await fsp.readdir(UPLOADS) : [];
+    const partial = fs.existsSync(UPLOADS) ? (await fsp.readdir(UPLOADS)).filter(n => !n.startsWith('.')) : [];
     const committed = fs.existsSync(REPORTS) ? (await fsp.readdir(REPORTS)).filter(n => !n.startsWith('.')) : [];
-    return send(res, 200, { faults, partialUploads: partial.length, committedReports: committed.length });
+    return send(res, 200, { faults, mode: currentMode(), partialUploads: partial.length, committedReports: committed.length });
   }
   send(res, 404, { error: 'not found' });
 }
@@ -311,7 +336,10 @@ async function handleAdmin(req, res, url) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const started = Date.now();
-  res.on('finish', () => log(`${req.method} ${url.pathname} → ${res.statusCode} ${Date.now() - started}ms`));
+  // The admin page polls /admin/state every 2 s; logging it would bury the upload lines.
+  if (url.pathname !== '/admin/state') {
+    res.on('finish', () => log(`${req.method} ${url.pathname} → ${res.statusCode} ${Date.now() - started}ms`));
+  }
 
   try {
     if (url.pathname.startsWith('/admin')) return await handleAdmin(req, res, url);

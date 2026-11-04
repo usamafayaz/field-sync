@@ -3,91 +3,155 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FieldSync server controls</title>
+<title>FieldSync server</title>
 <style>
-  :root{--paper:#ECEEEA;--surface:#FAFBF9;--ink:#1B2420;--ink2:#4D5853;--ink3:#87918C;--line:#D5DAD5;--hivis:#F5C518;--red:#B0362C;--green:#23734A}
+  @font-face{font-family:Plex;src:url(/admin/fonts/IBMPlexSans_400Regular.ttf);font-weight:400}
+  @font-face{font-family:Plex;src:url(/admin/fonts/IBMPlexSans_500Medium.ttf);font-weight:500}
+  @font-face{font-family:Plex;src:url(/admin/fonts/IBMPlexSans_600SemiBold.ttf);font-weight:600}
+  @font-face{font-family:PlexMono;src:url(/admin/fonts/IBMPlexMono_400Regular.ttf)}
+
+  /* Same tokens as the light theme in src/ui/theme.tsx */
+  :root{
+    --bg:#ECEEEA;--surface:#FAFBF9;--sunken:#E2E6E1;--field:#FFFFFF;
+    --text:#1B2420;--muted:#4D5853;--faint:#626C67;--border:#D5DAD5;--border2:#BCC3BD;
+    --accent:#1DB954;--accent-pressed:#19A04A;--on-accent:#1B2420;--danger-border:#E3B7B2;
+    --ok-fg:#1F6843;--ok-bg:#DCEEE2;--ok-dot:#2E8A5A;
+    --warn-fg:#8A4210;--warn-bg:#F8E6D8;--warn-dot:#D9772B;
+    --bad-fg:#A2322A;--bad-bg:#F7E1DE;--bad-dot:#C4453D;
+    --overlay:rgba(27,36,32,.88);
+    color-scheme:light;
+  }
+
   *{box-sizing:border-box}
-  body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
-  main{max-width:720px;margin:0 auto;padding:32px 20px 64px}
-  h1{font-size:26px;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
-  p.sub{color:var(--ink2);margin:0 0 24px}
-  section{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
-  h2{font-size:16px;margin:0 0 12px;font-weight:600}
-  .presets{display:flex;flex-wrap:wrap;gap:8px}
-  button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer}
-  button:hover{border-color:var(--ink3)}
-  button.primary{background:var(--hivis);border-color:#d9ad0f;font-weight:600}
-  button.danger{color:var(--red)}
-  .row{display:grid;grid-template-columns:1fr 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid #e6e9e5}
-  .row:first-of-type{border-top:0}
-  .row label b{display:block;font-weight:500}
-  .row label span{color:var(--ink3);font-size:13px}
-  input{font:inherit;width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:right}
-  .state{display:flex;gap:24px;color:var(--ink2)}
-  .state b{color:var(--ink);font-size:20px;display:block;font-variant-numeric:tabular-nums}
-  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Plex,system-ui,sans-serif}
+  main{max-width:560px;margin:0 auto;padding:32px 16px 48px}
+  button,input{font:inherit;color:inherit}
+  button{cursor:pointer}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  h1{font-size:30px;line-height:1.15;font-weight:600;letter-spacing:-.02em;margin:0}
+  .counts{margin:6px 0 0;color:var(--muted);font-size:14px}
+  .counts b{color:var(--text);font-weight:600}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap;margin-top:6px}
+  .pill i{width:7px;height:7px;border-radius:4px}
+  .ok{color:var(--ok-fg);background:var(--ok-bg)} .ok i{background:var(--ok-dot)}
+  .warn{color:var(--warn-fg);background:var(--warn-bg)} .warn i{background:var(--warn-dot)}
+  .bad{color:var(--bad-fg);background:var(--bad-bg)} .bad i{background:var(--bad-dot)}
+
+  h2{font-size:18px;font-weight:600;margin:28px 0 8px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+
+  .mode{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--border);padding:14px 16px;min-height:64px}
+  .mode:first-child{border-top:0}
+  .mode:hover{background:var(--sunken)}
+  .mode span{flex:1}
+  .mode b{display:block;font-weight:500}
+  .mode small{display:block;color:var(--faint);font-size:14px;line-height:1.4}
+  .radio{width:20px;height:20px;border-radius:10px;border:2px solid var(--border2);flex:none}
+  .mode[aria-checked=true]{background:var(--sunken)}
+  .mode[aria-checked=true] .radio{border:6px solid var(--accent)}
+
+  details{margin-top:12px}
+  summary{cursor:pointer;color:var(--muted);font-size:14px;padding:4px 0}
+  .knobs{margin-top:8px;padding:4px 16px 16px}
+  .knob{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
+  .knob:first-child{border-top:0}
+  .knob label{font-size:14px}
+  .knob label small{display:block;color:var(--faint);font-size:13px}
+  .knob input{width:110px;padding:8px 10px;border:1px solid var(--border2);border-radius:10px;background:var(--field);text-align:right;font-family:PlexMono,ui-monospace,monospace;font-size:14px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--border2);background:var(--surface);font-weight:600}
+  .btn:hover{background:var(--sunken)}
+  .primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);margin-top:12px}
+  .primary:hover{background:var(--accent-pressed)}
+  .danger{border-color:var(--danger-border);color:var(--bad-fg);margin-top:32px}
+
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--overlay);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
   #toast.on{opacity:1}
+  @media (prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
 </head>
 <body>
 <main>
-  <h1>Server controls</h1>
-  <p class="sub">Make the backend misbehave on purpose. Changes apply to the next request.</p>
-
-  <section>
-    <h2>Right now</h2>
-    <div class="state">
-      <div><b id="committed">–</b>reports stored</div>
-      <div><b id="partial">–</b>reports half-uploaded</div>
+  <header>
+    <div>
+      <h1>FieldSync server</h1>
+      <p class="counts"><b id="committed">–</b> reports stored, <b id="partial">–</b> half-uploaded</p>
     </div>
-  </section>
+    <span id="status" class="pill ok"><i></i><span>Healthy</span></span>
+  </header>
 
-  <section>
-    <h2>Presets</h2>
-    <div class="presets">
-      <button data-preset="healthy" class="primary">Healthy</button>
-      <button data-preset="2g">Slow 2G</button>
-      <button data-preset="flaky">Flaky: drops, 503s, lost replies</button>
-      <button data-preset="down">Down: every request 503</button>
-      <button data-preset="black-hole">Black hole: never answers</button>
-      <button data-preset="refuse">Refuse uploads (400)</button>
-    </div>
-  </section>
+  <h2>How the server behaves</h2>
+  <div class="card" role="radiogroup" aria-label="Server mode" id="modes"></div>
 
-  <section>
-    <h2>Fine-tune</h2>
-    <form id="f">
-      <div class="row"><label><b>Latency (ms)</b><span>Added before every request</span></label><input name="latencyMs" type="number" min="0" step="100"></div>
-      <div class="row"><label><b>Bandwidth (bytes/s)</b><span>0 is unthrottled. About 6000 is honest 2G</span></label><input name="bandwidthBps" type="number" min="0" step="1000"></div>
-      <div class="row"><label><b>Drop connection</b><span>Chance of killing the socket mid-upload, 0–1</span></label><input name="dropRate" type="number" min="0" max="1" step="0.05"></div>
-      <div class="row"><label><b>Server error (503)</b><span>Transient. The app should retry</span></label><input name="errorRate" type="number" min="0" max="1" step="0.05"></div>
-      <div class="row"><label><b>Hang</b><span>Accept the request, never answer</span></label><input name="hangRate" type="number" min="0" max="1" step="0.05"></div>
-      <div class="row"><label><b>Refuse upload (400)</b><span>Permanent. The app must stop and ask the user</span></label><input name="rejectRate" type="number" min="0" max="1" step="0.05"></div>
-      <div class="row"><label><b>Lose commit response</b><span>Store the report, then drop the reply</span></label><input name="loseResponseRate" type="number" min="0" max="1" step="0.05"></div>
-      <p><button class="primary" type="submit">Apply</button></p>
+  <details>
+    <summary>Custom values</summary>
+    <form class="card knobs" id="knobs">
+      <div class="knob"><label for="latencyMs">Delay per request<small>milliseconds</small></label><input id="latencyMs" name="latencyMs" type="number" min="0" step="100"></div>
+      <div class="knob"><label for="bandwidthBps">Upload speed<small>bytes per second, 0 = unlimited</small></label><input id="bandwidthBps" name="bandwidthBps" type="number" min="0" step="1000"></div>
+      <div class="knob"><label for="dropRate">Drop the connection<small>chance, 0 to 1</small></label><input id="dropRate" name="dropRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="knob"><label for="errorRate">Reply 503<small>chance, 0 to 1</small></label><input id="errorRate" name="errorRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="knob"><label for="hangRate">Never answer<small>chance, 0 to 1</small></label><input id="hangRate" name="hangRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="knob"><label for="rejectRate">Refuse uploads (400)<small>chance, 0 to 1</small></label><input id="rejectRate" name="rejectRate" type="number" min="0" max="1" step="0.05"></div>
+      <div class="knob"><label for="loseResponseRate">Lose the reply after saving<small>chance, 0 to 1</small></label><input id="loseResponseRate" name="loseResponseRate" type="number" min="0" max="1" step="0.05"></div>
+      <button class="btn primary" type="submit">Apply custom values</button>
     </form>
-  </section>
+  </details>
 
-  <section>
-    <h2>Danger</h2>
-    <button class="danger" id="wipe">Delete every report on the server</button>
-  </section>
+  <button class="btn danger" id="wipe">Delete every report on the server</button>
 </main>
-<div id="toast"></div>
+<div id="toast" role="status"></div>
+
 <script>
-  const f = document.getElementById('f');
-  const toast = m => { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1600); };
-  const fill = faults => { for (const [k, v] of Object.entries(faults)) if (f.elements[k]) f.elements[k].value = v; };
-  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json());
-  async function refresh() {
-    const s = await fetch('/admin/state').then(r => r.json());
-    document.getElementById('committed').textContent = s.committedReports;
-    document.getElementById('partial').textContent = s.partialUploads;
-    if (!f.contains(document.activeElement)) fill(s.faults);
+  // id, name, what the server does, status pill tone
+  const MODES = [
+    ['healthy', 'Healthy', 'Answers every request normally.', 'ok'],
+    ['2g', 'Slow 2G', '800 ms delay and about 6 KB/s.', 'warn'],
+    ['flaky', 'Flaky', 'Drops uploads, random 503s, loses some replies.', 'warn'],
+    ['demo', 'Demo', 'About 0.8 MB/s, drops some uploads, always loses the reply after saving.', 'warn'],
+    ['down', 'Down', 'Every request gets 503. The app retries.', 'bad'],
+    ['black-hole', 'Black hole', 'Accepts requests and never answers. The app times out.', 'bad'],
+    ['refuse', 'Refuse uploads', 'Every upload gets 400. The app stops and asks the user.', 'bad'],
+  ];
+  const $ = id => document.getElementById(id);
+  const form = $('knobs');
+  const post = (url, body) =>
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(r => r.json());
+  const toast = text => { $('toast').textContent = text; $('toast').classList.add('on'); setTimeout(() => $('toast').classList.remove('on'), 1600); };
+
+  $('modes').innerHTML = MODES.map(([id, name, what]) =>
+    `<button class="mode" role="radio" aria-checked="false" data-mode="${id}"><span><b>${name}</b><small>${what}</small></span><i class="radio"></i></button>`).join('');
+
+  function show(state) {
+    $('committed').textContent = state.committedReports;
+    $('partial').textContent = state.partialUploads;
+    const mode = MODES.find(m => m[0] === state.mode);
+    $('status').className = 'pill ' + (mode ? mode[3] : 'warn');
+    $('status').querySelector('span').textContent = mode ? mode[1] : 'Custom';
+    document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-checked', String(b.dataset.mode === state.mode)));
+    if (!form.contains(document.activeElement)) for (const [k, v] of Object.entries(state.faults)) form.elements[k].value = v;
   }
-  document.querySelectorAll('[data-preset]').forEach(b => b.onclick = async () => { const r = await post('/admin/faults', { preset: b.dataset.preset }); fill(r.faults); toast('Preset applied: ' + b.textContent); });
-  f.onsubmit = async e => { e.preventDefault(); const body = {}; for (const el of f.elements) if (el.name) body[el.name] = Number(el.value) || 0; fill((await post('/admin/faults', body)).faults); toast('Applied'); };
-  const wipe = document.getElementById('wipe');
+  const refresh = () => fetch('/admin/state').then(r => r.json()).then(show).catch(() => {});
+
+  document.querySelectorAll('.mode').forEach(b => (b.onclick = async () => {
+    await post('/admin/faults', { preset: b.dataset.mode });
+    await refresh();
+    toast(`Server is now ${b.querySelector('b').textContent}`);
+  }));
+
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const body = {};
+    for (const el of form.elements) if (el.name) body[el.name] = Number(el.value) || 0;
+    await post('/admin/faults', body);
+    await refresh();
+    toast('Custom values applied');
+  };
+
+  // Deleting needs a second click within 4 seconds.
+  const wipe = $('wipe');
   let armed = null;
   wipe.onclick = async () => {
     if (!armed) {
@@ -95,11 +159,16 @@
       armed = setTimeout(() => { armed = null; wipe.textContent = 'Delete every report on the server'; }, 4000);
       return;
     }
-    clearTimeout(armed); armed = null;
+    clearTimeout(armed);
+    armed = null;
     wipe.textContent = 'Delete every report on the server';
-    await post('/admin/wipe'); toast('Server data deleted'); refresh();
+    await post('/admin/wipe');
+    await refresh();
+    toast('Every report on the server was deleted');
   };
-  refresh(); setInterval(refresh, 2000);
+
+  refresh();
+  setInterval(refresh, 2000);
 </script>
 </body>
 </html>

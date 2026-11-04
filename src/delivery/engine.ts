@@ -38,6 +38,8 @@ export class DeliveryEngine {
 
   private run?: { controller: AbortController; done: Promise<void> };
   private wakeController = new AbortController();
+  /** Aborted by "Try now", so a request that's hanging doesn't make the user wait it out. */
+  private attempt = new AbortController();
   private unsubscribers: Array<() => void> = [];
 
   private consecutiveFailures = 0;
@@ -96,6 +98,7 @@ export class DeliveryEngine {
     }
     this.backoffUntil = 0;
     this.consecutiveFailures = 0;
+    this.attempt.abort();
     this.wake();
   }
 
@@ -177,7 +180,9 @@ export class DeliveryEngine {
       }
 
       const next = waiting[0];
-      await this.guard(next, stop, () => this.deliver(next, stop), true);
+      this.attempt = new AbortController();
+      const signal = anySignal(stop, this.attempt.signal);
+      await this.guard(next, stop, () => this.deliver(next, signal), true);
     }
     keepAlive.release();
   }
