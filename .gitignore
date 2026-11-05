@@ -79,3 +79,4 @@ server/data/
 
 # generated test photos (large)
 scripts/test-photos/
+config.bat

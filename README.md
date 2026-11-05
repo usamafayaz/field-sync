@@ -4,9 +4,6 @@ A React Native (bare CLI, TypeScript) app for filing photo reports from a site w
 connection is 2G at best and gone for stretches. A report is a short description and one to
 five photos. Once saved, it reaches the server by itself, exactly once, whatever the network does.
 
-**Demo video:**
-https://drive.google.com/file/d/1vAa2umhA8L0dt1xQCyZN49L_Q-6PHGe4/view?usp=drive_link
-
 ```
 src/
   config.ts            product rules (1–5 photos, 5 MB) and tuning (chunk sizes, timeouts)
@@ -26,6 +23,28 @@ android/.../delivery/  DeliveryService (foreground HeadlessJsTaskService) + Turb
 server/                the test backend (Node, no dependencies) with fault injection
 __tests__/             the delivery guarantees, tested headless against a fake server
 ```
+
+## Where each requirement is met
+
+Each row names the code and the test (`npm test`) or device check that shows it.
+
+| Brief | Where in the code | Shown by |
+| --- | --- | --- |
+| The main scenario: offline, 3 reports, force-quit, throttled link with drops | `src/delivery/engine.ts` | Test "offline → three reports (one with five huge photos) → force-quit → reopen → flaky link → all three exactly once" |
+| Nothing lost to a force-quit | `outbox.ts` (atomic file), `drafts.ts` (`submit`, recovery in `load`) | Test "a crash after moving the photos but before recording the report loses nothing" |
+| Nothing lost to a dropped connection | `engine.ts` `uploadImages` (asks the server's offset first) | Test "resumes from the server offset after a drop instead of starting over" |
+| Nothing lost to a lost response; nothing lands twice | `newId()` in `drafts.ts`; idempotent `PUT /api/reports/:id` in `server/index.js` | Tests "a lost commit response does not create a second report" and "a crash between saving and clearing the draft cannot produce a duplicate" |
+| Only the right failures are retried | `errors.ts` (transient vs permanent), `backoff.ts` | Tests "retries 503s and hung requests" and "does not retry a refused upload; it waits for the user" |
+| A request that never answers | `src/platform/httpTransport.ts` (overall timeout plus a 30 s stall timeout) | `__tests__/httpTransport.test.ts` |
+| One refused report doesn't block the rest | `engine.ts` loop | Test "a blocked report does not hold up the ones behind it" |
+| Nothing waits on the network except the network | `engine.ts` (prepares photos before checking the network) | Test "waits for the network instead of burning attempts while offline" |
+| 5 MB ceiling; huge originals still worth looking at | `prepareImage.ts`, `IMAGE_LADDER` and `IMAGE_TARGET_BYTES` in `config.ts` | Test "brings an 18 MB original under the ceiling and passes a small JPEG through untouched" |
+| Doesn't freeze the app getting there | `src/platform/imageProcessor.ts` (native resizer on a background thread) | Device check below |
+| 1–5 photos, non-blank description | `validateDraft` in `drafts.ts` | Tests "enforces 1–5 photos and a non-blank description" and "never adds a sixth photo" |
+| Background with work outstanding | `DeliveryService.kt`, `src/specs/NativeDeliveryService.ts`, `index.js` | Device check below |
+| Show what the server holds, fetched from it | `listReports` in `api.ts`, `src/ui/screens/ServerScreen.tsx` | Device check below |
+| Reset, and nothing survives that shouldn't | `resetDevice` in `src/services.ts` | Device check below |
+| Logic separable from UI | `src/delivery` has no React Native imports; `src/ui` owns no logic | The tests above run the real engine in Jest, with no phone |
 
 ## Run it
 
@@ -287,7 +306,9 @@ Run on an Android 14 emulator (Pixel 7, API 34) against the real server:
 
 Bugs found this way and fixed: a hung request was being reported as "cancelled" (so it never backed
 off or showed an error), photo tiles collapsed to zero height, the keyboard covered *Save* in
-edge-to-edge mode, and saving five huge photos took ~20 s because they were copied instead of moved.
+edge-to-edge mode, saving five huge photos took ~20 s because they were copied instead of moved,
+and a request the server never answered took ~12 minutes to time out once chunks had grown to
+1 MB (now a 30 s stall timeout, and *Try now* cancels it).
 
 ## What I'd do with another day
 
